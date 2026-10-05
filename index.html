@@ -160,6 +160,17 @@ button{-webkit-tap-highlight-color:transparent}
 .screen.on .nav+.gbar{display:none}
 .screen.on>.top{grid-area:1/2}.screen.on>.sbar{grid-area:2/2}.screen.on>.body,.screen.on>.prof{grid-area:3/2;min-height:0}
 .splash{padding:18px 0 14px}.splash svg{width:110px;height:110px}.splash h2{font-size:28px;margin-top:0}.prof .ava{width:100px;height:100px;font-size:40px}}
+.x{width:32px;height:32px}
+.chev svg{transition:transform .15s}.chev.c svg{transform:rotate(-90deg)}
+.ghead .gname{flex:1 0 calc(100% - 46px)}
+.dhead{gap:4px}.dhead .dn{flex:1;min-width:0;font-weight:900;cursor:pointer}
+.bt{cursor:pointer}.act .at{flex:1;min-width:0}.act .badge,.act .x{margin-left:0}
+.npv{white-space:pre-wrap;line-height:26px;height:104px;overflow:hidden;background:repeating-linear-gradient(transparent 0 25px,var(--line) 25px 26px);font-weight:600;word-break:break-word}
+.nb,.ntitle{cursor:pointer}
+.full{position:absolute;inset:0;background:var(--bg);z-index:6;display:none;flex-direction:column}.full.on{display:flex}
+#nfx{flex:1;width:100%;min-height:50vh;border:0;background:var(--card);color:var(--ink);font:inherit;font-weight:600;border-radius:12px;padding:14px;resize:none;line-height:1.5;outline:0}
+.ntitle.big{font-size:22px;font-weight:900;margin:0 0 10px;padding:8px 6px;width:100%;background:none;border:0;color:var(--ink);outline:0}
+.scrim{z-index:8}
 </style></head>
 <body>
 <div class="phone" id="ph" data-t="dark">
@@ -195,6 +206,8 @@ button{-webkit-tap-highlight-color:transparent}
  <section class="screen" id="s-chat"></section>
  <section class="screen" id="s-auth"></section>
 
+ <div class="full" id="full"></div>
+ <input type="file" id="avf" accept="image/*" hidden>
  <div class="scrim" id="scrim"><div class="sheet" id="sheet"></div></div>
  <div class="toast" id="toast"></div>
 </div>
@@ -220,6 +233,8 @@ back:'<path d="M15 5l-7 7 7 7"/>',
 send:'<path d="M3 11l18-8-8 18-2-8z"/>',
 trash:'<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>',
 widget:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+chev:'<path d="M6 9l6 6 6-6"/>',
+edit:'<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
 flame:'<path d="M12 22c4 0 7-2.8 7-7 0-3-2-5-3.5-7-.3 2-1.2 3-2.5 3 .5-3-1-6-4-8 .2 3.5-4 5.5-4 11 0 4.2 3 8 7 8z"/>'};
 const ic=n=>`<svg viewBox="0 0 24 24">${I[n]}</svg>`;
 const ava=(t,c,s)=>`<div class="ava" style="background:${c};width:${s||46}px;height:${s||46}px;font-size:${(s||46)*.4}px">${t}</div>`;
@@ -231,10 +246,10 @@ const S={
  shared:[{name:'Режим с Аней',days:[{d:'Вт',a:[{t:'Не беспокоить',f:'19:00',to:'21:00'}]}]}],
  notes:[{title:'Купить',text:'молоко\nхлеб\nкофе'},{title:'Идеи на выходные',text:'парк\nкино'}],
  msgs:[{me:0,t:'Привет! Давай вместе настроим вечер вторника'},{me:1,t:'Давай, добавила режим «Не беспокоить»'}],
- notif:true,theme:'dark',cur:'splash',prof:0};
+ notif:true,pf:{nick:'vika_zapomni',name:'Вика',ava:null},theme:'dark',cur:'splash',prof:0};
 try{const z=JSON.parse(localStorage.getItem('zp')||'null');if(z){Object.assign(S,z);S.cur='splash';}}catch(e){}
 $('#ph').dataset.t=S.theme;
-const save=()=>{try{localStorage.setItem('zp',JSON.stringify({home:S.home,shared:S.shared,notes:S.notes,msgs:S.msgs,notif:S.notif,theme:S.theme}))}catch(e){}};
+const save=()=>{try{localStorage.setItem('zp',JSON.stringify({home:S.home,shared:S.shared,notes:S.notes,msgs:S.msgs,notif:S.notif,theme:S.theme,pf:S.pf}))}catch(e){}};
 const uid=()=>Math.random().toString(36).slice(2,10);
 function mig(g){g.id=g.id||uid();g.days.forEach(d=>{d.a=d.a.map(a=>a.acts?a:{id:a.id||uid(),name:a.t,f:a.f,to:a.to,p:a.p,by:a.by,acts:[{id:uid(),t:a.t,v:a.v||'',p:false}]});d.a.forEach(b=>{b.id=b.id||uid();b.acts.forEach(x=>{x.id=x.id||uid()})})})}
 ['home','shared'].forEach(k=>S[k].forEach(mig));
@@ -243,7 +258,32 @@ const DOW={'Вс':1,'Пн':2,'Вт':3,'Ср':4,'Чт':5,'Пт':6,'Сб':7},TY={'
 function sync(){if(!NP)return;try{const it=[],wg=[],ok=t=>/^\d\d:\d\d$/.test(t);
  ['home','shared'].forEach(k=>S[k].forEach(g=>{const rows=[];g.days.forEach(d=>{if(d.p)return;const days=d.d=='Весь день'?[1,2,3,4,5,6,7]:[DOW[d.d]];d.a.forEach(b=>{if(b.p||!ok(b.f)||!ok(b.to))return;const as=b.acts.filter(a=>!a.p);rows.push({days,from:b.f,to:b.to,name:b.name,acts:as.map(a=>a.t).join(', ')});as.forEach(a=>it.push({id:a.id,type:TY[a.t],value:a.v||'',from:b.f,to:b.to,days,title:b.name+' · '+a.t+(a.v?' · '+a.v:''),text:b.f+'–'+b.to}));});});wg.push({id:g.id,name:g.name,rows});}));
  NP.schedule({items:JSON.stringify(it),wg:JSON.stringify(wg),notify:S.notif}).catch(()=>{});}catch(e){}}
-const blkHtml=(b,gi,di,bi)=>`<div class="blk${b.p?' pend':''}"><div class="bh"><div class="bt"><b>${E(b.name)}</b><span>${b.f}–${b.to}</span></div>${bdg(G(gi),b,'okb',`${gi}.${di}.${bi}`)}<button class="x" data-delblk="${gi}.${di}.${bi}" aria-label="Удалить блок">${ic('trash')}</button><button class="x" data-newact="${gi}.${di}.${bi}" aria-label="Добавить действие">${ic('plus')}</button></div>${b.acts.length?b.acts.map((a,ai)=>`<div class="act${a.p?' pend':''}">${E(a.t)}${a.v?' · '+E(a.v):''}${bdg(G(gi),a,'oka',`${gi}.${di}.${bi}.${ai}`)}<button class="x" data-delacn="${gi}.${di}.${bi}.${ai}" aria-label="Удалить действие">${ic('trash')}</button></div>`).join(''):'<div class="empty">Нет действий — нажмите плюс</div>'}</div>`;
+const colb=(t,ref,o)=>`<button class="x chev${o.col?' c':''}" data-col="${t}:${ref}" aria-label="${o.col?'Развернуть':'Свернуть'}">${ic('chev')}</button>`;
+const ed=(t,ref,l)=>`<button class="x" data-edit="${t}:${ref}" aria-label="Изменить ${l}">${ic('edit')}</button>`;
+const blkHtml=(b,gi,di,bi)=>{const r=`${gi}.${di}.${bi}`;return `<div class="blk${b.p?' pend':''}"><div class="bh">${colb('b',r,b)}<div class="bt" data-edit="b:${r}"><b>${E(b.name)}</b><span>${b.f}–${b.to}</span></div>${bdg(G(gi),b,'okb',r)}${ed('b',r,'блок')}<button class="x" data-delblk="${r}" aria-label="Удалить блок">${ic('trash')}</button><button class="x" data-newact="${r}" aria-label="Добавить действие">${ic('plus')}</button></div>${b.col?'':(b.acts.length?b.acts.map((a,ai)=>`<div class="act${a.p?' pend':''}"><span class="at">${E(a.t)}${a.v?' · '+E(a.v):''}</span>${bdg(G(gi),a,'oka',`${r}.${ai}`)}${ed('a',`${r}.${ai}`,'действие')}<button class="x" data-delacn="${r}.${ai}" aria-label="Удалить действие">${ic('trash')}</button></div>`).join(''):'<div class="empty">Нет действий — нажмите плюс</div>')}</div>`};
+const avaBig=()=>`<div class="ava" data-pickava role="button" aria-label="Сменить аватарку" style="background:${S.pf.ava?`url(${S.pf.ava}) center/cover`:'#6C5CE7'}">${S.pf.ava?'':E((S.pf.name||S.pf.nick||'?')[0].toUpperCase())}</div>`;
+function exField(t,v){return t=='Открыть ссылку'?`<label>Ссылка</label><input id="xv" value="${E(v||'')}">`:t=='Открыть приложение'?`<label>Приложение</label><input id="xv" value="${E(v||'')}">`:''}
+const objAt=(t,ref)=>{const a=ref.split('.'),g=S[a[0]][a[1]];return t=='g'?g:t=='d'?g.days[a[2]]:t=='b'?g.days[a[2]].a[a[3]]:g.days[a[2]].a[a[3]].acts[a[4]]};
+function openEdit(t,ref){const o=objAt(t,ref);pick={e:t,ref};
+ const mv='<div class="tm" style="margin-top:14px"><button class="chip" data-mv="up">↑ Выше</button><button class="chip" data-mv="down">↓ Ниже</button></div>';let h='';
+ if(t=='g')h=`<h3>Группа</h3><label>Название</label><input id="en" value="${E(o.name)}" maxlength="40">${mv}`;
+ if(t=='d'){pick.v=o.d;h=`<h3>День</h3><div class="chips">${DAYS.map(x=>`<button class="chip ${x==o.d?'on':''}" data-d="${x}">${x}</button>`).join('')}</div>${mv}`;}
+ if(t=='b')h=`<h3>Блок</h3><label>Название</label><input id="en" value="${E(o.name)}" maxlength="30"><label>Время</label><div class="tm"><input id="tf" type="time" value="${o.f}" aria-label="С"><span>—</span><input id="tt" type="time" value="${o.to}" aria-label="До"></div>${mv}`;
+ if(t=='a'){pick.v=o.t;h=`<h3>Действие</h3><div class="chips">${ACTS.map(y=>`<button class="chip ${y==o.t?'on':''}" data-at="${y}">${y}</button>`).join('')}</div><div id="ex">${exField(o.t,o.v)}</div>`;}
+ sheet(h+'<button class="cta" data-saveedit>Сохранить</button>');}
+function doMove(dir){const{e,ref}=pick,a=ref.split('.');let arr,i;
+ if(e=='g'){arr=S[a[0]];i=+a[1]}else if(e=='d'){arr=S[a[0]][a[1]].days;i=+a[2]}else if(e=='b'){arr=S[a[0]][a[1]].days[a[2]].a;i=+a[3]}else return;
+ const j=dir=='up'?i-1:i+1;if(j<0||j>=arr.length)return toast(dir=='up'?'Уже первый':'Уже последний');
+ [arr[i],arr[j]]=[arr[j],arr[i]];persist(a[0],a[1]);closeSheet();render();toast('Перемещено');}
+function saveEdit(){const{e,ref}=pick,a=ref.split('.'),o=objAt(e,ref),sh=a[0]=='shared';
+ if(e=='g'||e=='b'){const n=$('#en').value.trim();if(!n)return toast('Введите название');o.name=n;}
+ if(e=='b'){o.f=$('#tf').value||o.f;o.to=$('#tt').value||o.to;}
+ if(e=='d')o.d=pick.v;
+ if(e=='a'){o.t=pick.v;const x=$('#xv');o.v=x?x.value:'';}
+ if(sh&&e!='g'){o.p=true;o.by=ME;}
+ persist(a[0],a[1]);closeSheet();render();toast('Сохранено');}
+function openNote(i){S.on=i;const n=S.notes[i];$('#full').innerHTML=`<div class="top"><button class="ib" data-closenote aria-label="Свернуть заметку">${ic('back')}</button><h1>Заметка</h1><button class="ib" data-delnote2 aria-label="Удалить заметку">${ic('trash')}</button></div><div class="body" style="display:flex;flex-direction:column"><input class="ntitle big" id="nft" value="${E(n.title)}" maxlength="60" aria-label="Название заметки"><textarea id="nfx" aria-label="Текст заметки">${E(n.text)}</textarea></div>`;$('#full').classList.add('on');}
+function closeNote(){$('#full').classList.remove('on');S.on=null;save();render();}
 // ===== ОБЛАКО (Firebase): вставьте сюда данные проекта =====
 const CFG={apiKey:"",authDomain:"",projectId:"",appId:""};
 // ===========================================================
@@ -309,23 +349,22 @@ function savePic(ref){const g=G(ref);let url;try{url=drawPic(g)}catch(e){return 
  else{const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();toast('Картинка создана (в браузере скачивание может быть отключено)');}}
 let skip=false;
 const refreshPerm=()=>{NP&&NP.status().then(r=>{S.perm=r;render();}).catch(()=>{})};
-const perms=()=>`<div class="set"><div class="row">Разрешения Android</div>${NP?[['dnd','Не беспокоить и беззвучный'],['admin','Блокировка телефона'],['overlay','Ссылки и приложения'],['alarm','Точное время']].map(([k,t])=>`<div class="row"><span>${t}</span><button class="badge" data-perm="${k}">${(S.perm||{})[k]?'Включено':'Включить'}</button></div>`).join('')+'<div class="row"><span>Виджет: все группы</span><button class="badge" data-widget>Добавить</button></div>':'<div class="empty" style="padding:10px 0">Доступно в установленном APK</div>'}</div>`;
+const perms=()=>`<div class="set"><div class="row">Разрешения Android</div>${NP?[['dnd','Не беспокоить и беззвучный'],['admin','Блокировка телефона'],['overlay','Ссылки и приложения'],['alarm','Точное время'],['battery','Работа в фоне']].map(([k,t])=>`<div class="row"><span>${t}</span><button class="badge" data-perm="${k}">${(S.perm||{})[k]?'Включено':'Включить'}</button></div>`).join('')+'<div class="row"><span>Виджет: все группы</span><button class="badge" data-widget>Добавить</button></div>':'<div class="empty" style="padding:10px 0">Доступно в установленном APK</div>'}</div>`;
 const tabs=[['home','Главная','home'],['notes','Заметки','note'],['shared','Вместе','users'],['search','Поиск','search'],['me','Профиль','user']];
 const nav=a=>`<nav class="nav">${tabs.map(t=>`<button data-go="${t[0]}" class="${t[0]==a?'on':''}">${ic(t[2])}${t[1]}</button>`).join('')}</nav><div class="gbar"><i></i></div>`;
 const hdr=(title,btns)=>`<div class="top"><h1>${title}</h1>${btns}</div>`;
 const actHtml=(a,gi,di,ai,sh)=>`<div class="act ${a.p?'pend':''}">${a.t}${a.v?` · ${a.v}`:''}<b>${a.f}–${a.to}</b>${bdg(G(gi),a,'ok',`${gi}.${di}.${ai}`)}<button class="x" data-delact="${gi}.${di}.${ai}" aria-label="Удалить действие">${ic('trash')}</button></div>`;
-function groups(key,sh){const g=S[key];if(!g.length)return '<p class="empty">Групп пока нет. Нажмите плюс, чтобы добавить.</p>';
- return g.map((x,gi)=>`<div class="group"><div class="ghead"><div class="gname" contenteditable="true" spellcheck="false" data-gn="${key}.${gi}" aria-label="Название группы">${E(x.name)}</div>
- ${key=='shared'?`<button class="ib" data-chat="${gi}" aria-label="Чат">${ic('chat')}</button>`:''}<button class="ib" data-gw="${key}.${gi}" aria-label="Виджет группы">${ic('widget')}</button><button class="ib" data-print="${key}.${gi}" aria-label="Скачать фото расписания">${ic('print')}</button><button class="ib" data-delgrp="${key}.${gi}" aria-label="Удалить группу">${ic('trash')}</button><button class="ib pri" data-addday="${key}.${gi}" aria-label="Добавить день">${ic('plus')}</button></div>
- ${x.days.length?x.days.map((d,di)=>`<div class="day"><div class="dhead">${d.d}${bdg(x,d,'okd',key+'.'+gi+'.'+di)}<span style="display:flex;gap:6px"><button class="ib" data-delday="${key}.${gi}.${di}" aria-label="Удалить день">${ic('trash')}</button><button class="ib" data-newblk="${key}.${gi}.${di}" aria-label="Добавить блок">${ic('plus')}</button></span></div>
- ${d.a.length?d.a.map((b,bi)=>blkHtml(b,key+'.'+gi,di,bi)).join(''):'<div class="empty">Добавьте блок со временем</div>'}</div>`).join(''):'<div class="empty">Добавьте день недели или весь день</div>'}</div>`).join('');}
+function groups(key){const g=S[key];if(!g.length)return '<p class="empty">Групп пока нет. Нажмите плюс, чтобы добавить.</p>';
+ return g.map((x,gi)=>{const gr=`${key}.${gi}`;return `<div class="group"><div class="ghead">${colb('g',gr,x)}<div class="gname" contenteditable="true" spellcheck="false" data-gn="${gr}" aria-label="Название группы">${E(x.name)}</div>
+ ${key=='shared'?`<button class="ib" data-chat="${gi}" aria-label="Чат">${ic('chat')}</button>`:''}<button class="ib" data-gw="${gr}" aria-label="Виджет группы">${ic('widget')}</button><button class="ib" data-print="${gr}" aria-label="Скачать фото расписания">${ic('print')}</button><button class="ib" data-edit="g:${gr}" aria-label="Изменить группу">${ic('edit')}</button><button class="ib" data-delgrp="${gr}" aria-label="Удалить группу">${ic('trash')}</button><button class="ib pri" data-addday="${gr}" aria-label="Добавить день">${ic('plus')}</button></div>
+ ${x.col?'':(x.days.length?x.days.map((d,di)=>{const dr=`${gr}.${di}`;return `<div class="day"><div class="dhead">${colb('d',dr,d)}<span class="dn" data-edit="d:${dr}">${E(d.d)}</span>${bdg(x,d,'okd',dr)}<span style="display:flex;gap:2px">${ed('d',dr,'день')}<button class="x" data-delday="${dr}" aria-label="Удалить день">${ic('trash')}</button><button class="x" data-newblk="${dr}" aria-label="Добавить блок">${ic('plus')}</button></span></div>${d.col?'':(d.a.length?d.a.map((b,bi)=>blkHtml(b,gr,di,bi)).join(''):'<div class="empty">Добавьте блок со временем</div>')}</div>`}).join(''):'<div class="empty">Добавьте день недели или весь день</div>')}</div>`}).join('');}
 function render(){
  $('#s-home').innerHTML=hdr('Главная',`<button class="ib pri" data-addgrp="home" aria-label="Добавить группу">${ic('plus')}</button>`)+`<div class="body">${groups('home')}</div>`+nav('home');
  $('#s-shared').innerHTML=hdr('Вместе',`<button class="ib pri" data-addgrp="shared" aria-label="Добавить группу">${ic('plus')}</button>`)+`<div class="body"><p class="sub" style="margin:0 4px 12px">Новые дни и действия вступают в силу после подтверждения Ани</p>${groups('shared')}</div>`+nav('shared');
- $('#s-notes').innerHTML=hdr('Заметки',`<button class="ib pri" data-addnote aria-label="Добавить заметку">${ic('plus')}</button>`)+`<div class="body">${S.notes.length?'':'<p class="empty">Заметок пока нет. Нажмите плюс, чтобы добавить.</p>'}${S.notes.map((n,i)=>`<div class="note"><div class="nb"><textarea data-nt="${i}" aria-label="Текст заметки">${n.text}</textarea></div><div class="nrow"><input class="ntitle" data-ntt="${i}" value="${n.title}" aria-label="Название заметки"><button class="ib" data-delnote="${i}" aria-label="Удалить заметку">${ic('trash')}</button></div></div>`).join('')}</div>`+nav('notes');
+ $('#s-notes').innerHTML=hdr('Заметки',`<button class="ib pri" data-addnote aria-label="Добавить заметку">${ic('plus')}</button>`)+`<div class="body">${S.notes.length?'':'<p class="empty">Заметок пока нет. Нажмите плюс, чтобы добавить.</p>'}${S.notes.map((n,i)=>`<div class="note"><div class="nb" data-opennote="${i}" role="button" tabindex="0" aria-label="Открыть заметку"><div class="npv">${E(n.text)}</div></div><div class="nrow"><span class="ntitle" data-opennote="${i}">${E(n.title)}</span><button class="ib" data-delnote="${i}" aria-label="Удалить заметку">${ic('trash')}</button></div></div>`).join('')}</div>`+nav('notes');
  $('#s-search').innerHTML=hdr('Поиск','')+`<div class="sbar"><input id="q" placeholder="Ник или имя" aria-label="Поиск"><button class="ib pri" data-dosearch aria-label="Искать">${ic('search')}</button></div><div class="body" id="res"></div>`+nav('search');
  if(!CLOUD)res('');
- const me=`<div class="prof">${ava(E(((S.me&&S.me.nick)||'в')[0].toUpperCase()),'#6C5CE7',150)}<div class="nick">@${E((S.me&&S.me.nick)||'vika_zapomni')}</div><div class="sub">${S.me?'Аккаунт в облаке':'Вика · с вами с марта'}</div>`;
+ const me=`<div class="prof">${avaBig()}<div class="nick">@${E(S.pf.nick)}</div><div class="sub">${E(S.pf.name)}</div><button class="cta" style="max-width:260px;margin-top:12px" data-editprof>Изменить профиль</button>`;
  $('#s-me').innerHTML=hdr('Профиль','')+me+`<div class="set"><div class="row">Уведомления<button class="sw" role="switch" aria-checked="${S.notif}" data-sw="notif" aria-label="Уведомления"></button></div><div class="row">Тёмная тема<button class="sw" role="switch" aria-checked="${S.theme=='dark'}" data-sw="theme" aria-label="Тёмная тема"></button></div></div>${perms()}${CLOUD&&ME?'<button class="cta" style="max-width:260px" data-logout>Выйти из аккаунта</button>':''}</div>`+nav('me');
  const p=(S.L||P)[S.prof]||P[0];
  $('#s-prof').innerHTML=`<div class="top"><button class="ib" data-go="search" aria-label="Назад">${ic('back')}</button><h1>Профиль</h1></div><div class="prof">${ava(p.n[0],p.c,150)}<div class="nick">${E(p.k)}</div><div class="sub">${E(p.n)}</div><button class="cta" style="max-width:240px" data-togroup>Создать группу вместе</button></div>`+nav('search');
@@ -339,7 +378,7 @@ function closeSheet(){$('#scrim').classList.remove('on');}
 const ref=(k,i)=>S[k][i];
 let pick={};
 document.addEventListener('click',e=>{
- const t=e.target.closest('button,.chip,.scrim');if(!t)return;
+ const t=e.target.closest('button,.chip,.scrim,[data-edit],[data-opennote],[data-pickava]');if(!t)return;
  const d=t.dataset;
  if(t.classList.contains('scrim')&&e.target==t){closeSheet();return;}
  const esc=x=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;');
@@ -348,6 +387,17 @@ document.addEventListener('click',e=>{
  if(d.delnote!==undefined){pick={dn:+d.delnote};ask('Удалить заметку «'+esc(S.notes[d.delnote].title)+'»?','Текст заметки пропадёт.');return;}
  if(d.delday){pick={dd:d.delday};const[k,gi,di]=d.delday.split('.');ask('Удалить «'+esc(S[k][gi].days[di].d)+'»?','Все действия этого дня пропадут.');return;}
  if(d.delact){const[k,gi,di,ai]=d.delact.split('.');S[k][gi].days[di].a.splice(ai,1);persist(k,gi);render();toast('Действие удалено');return;}
+ if(d.col){const[ty,ref]=d.col.split(':');const o=objAt(ty,ref);o.col=!o.col;render();return;}
+ if(d.edit){const[ty,ref]=d.edit.split(':');openEdit(ty,ref);return;}
+ if(d.mv){doMove(d.mv);return;}
+ if(d.saveedit!==undefined){saveEdit();return;}
+ if(d.opennote!==undefined){openNote(+d.opennote);return;}
+ if(d.closenote!==undefined){closeNote();return;}
+ if(d.delnote2!==undefined){pick={dn:S.on};ask('Удалить заметку «'+esc(S.notes[S.on].title)+'»?','Текст заметки пропадёт.');return;}
+ if(d.pickava!==undefined){$('#avf').click();return;}
+ if(d.rmava!==undefined){S.pf.ava=null;save();closeSheet();render();toast('Фото убрано');return;}
+ if(d.editprof!==undefined){sheet(`<h3>Профиль</h3><label>Ник</label><input id="pn" value="${E(S.pf.nick)}" maxlength="20" autocapitalize="none"><label>Имя</label><input id="pm" value="${E(S.pf.name)}" maxlength="30"><div class="tm" style="margin-top:12px"><button class="chip" data-pickava>Выбрать фото</button>${S.pf.ava?'<button class="chip" data-rmava>Убрать фото</button>':''}</div><button class="cta" data-saveprof>Сохранить</button>`);return;}
+ if(d.saveprof!==undefined){const n=$('#pn').value.trim().replace(/^@/,''),m=$('#pm').value.trim();if(!/^[A-Za-z0-9_.]{3,20}$/.test(n))return toast('Ник: 3–20 символов, латиница, цифры, _ и .');if(!m)return toast('Введите имя');S.pf.nick=n;S.pf.name=m;save();closeSheet();render();toast('Профиль сохранён');return;}
  if(d.newblk){pick={k:d.newblk};sheet(`<h3>Новый блок</h3><label>Название</label><input id="bn" placeholder="Например, Учёба" maxlength="30"><label>Время блока</label><div class="tm"><input id="tf" type="time" value="09:00" aria-label="С"><span>—</span><input id="tt" type="time" value="13:00" aria-label="До"></div><button class="cta" data-cfblk>Создать блок</button>`);return;}
  if(d.cfblk!==undefined){const[k,gi,di]=pick.k.split('.');const nm=$('#bn').value.trim();if(!nm)return toast('Введите название блока');S[k][gi].days[di].a.push({id:uid(),name:nm,f:$('#tf').value||'09:00',to:$('#tt').value||'10:00',acts:[],p:k=='shared',by:ME});persist(k,gi);closeSheet();render();go(k);return;}
  if(d.newact){pick={k:d.newact,v:ACTS[0]};sheet(`<h3>Действие в блоке</h3><div class="chips">${ACTS.map((x,i)=>`<button class="chip ${i?'':'on'}" data-at="${x}">${x}</button>`).join('')}</div><div id="ex"></div><button class="cta" data-cfact>Добавить действие</button>`);return;}
@@ -361,7 +411,7 @@ document.addEventListener('click',e=>{
  if(d.logout!==undefined){logout();return;}
  if(d.perm){skip=true;NP&&NP.openSettings({kind:d.perm});return;}
  if(d.cancel!==undefined){closeSheet();return;}
- if(d.confdel!==undefined){let back='home';if(pick.del){const[k,i]=pick.del.split('.');if(k=='shared'&&CLOUD&&ME&&S[k][i].id)FB.fs.deleteDoc(FB.fs.doc(FB.db,'shared',S[k][i].id)).catch(()=>{});S[k].splice(i,1);back=k;toast('Группа удалена');}else if(pick.db){const[k,gi,di,bi]=pick.db.split('.');S[k][gi].days[di].a.splice(bi,1);persist(k,gi);back=k;toast('Блок удалён');}else if(pick.dd){const[k,gi,di]=pick.dd.split('.');S[k][gi].days.splice(di,1);persist(k,gi);back=k;toast('День удалён');}else{S.notes.splice(pick.dn,1);back='notes';toast('Заметка удалена');}closeSheet();render();go(back);return;}
+ if(d.confdel!==undefined){let back='home';if(pick.del){const[k,i]=pick.del.split('.');if(k=='shared'&&CLOUD&&ME&&S[k][i].id)FB.fs.deleteDoc(FB.fs.doc(FB.db,'shared',S[k][i].id)).catch(()=>{});S[k].splice(i,1);back=k;toast('Группа удалена');}else if(pick.db){const[k,gi,di,bi]=pick.db.split('.');S[k][gi].days[di].a.splice(bi,1);persist(k,gi);back=k;toast('Блок удалён');}else if(pick.dd){const[k,gi,di]=pick.dd.split('.');S[k][gi].days.splice(di,1);persist(k,gi);back=k;toast('День удалён');}else{S.notes.splice(pick.dn,1);back='notes';closeNote();toast('Заметка удалена');}closeSheet();render();go(back);return;}
  if(d.go){go(d.go);return;}
  if(d.chat!==undefined){openChat(+d.chat);return;}
  if(d.prof!==undefined){S.prof=+d.prof;render();go('prof');return;}
@@ -369,7 +419,7 @@ document.addEventListener('click',e=>{
  if(d.widget!==undefined||d.gw){if(!NP)return toast('Виджеты доступны в установленном APK');NP.pinWidget({gid:d.gw?G(d.gw).id:''}).then(r=>toast(r.ok?'Подтвердите добавление виджета':'Удерживайте экран → Виджеты → Запомни')).catch(()=>toast('Не удалось добавить виджет'));return;}
  if(d.sw){if(d.sw=='notif'){S.notif=!S.notif;toast(S.notif?'Уведомления включены':'Уведомления выключены')}else{S.theme=S.theme=='dark'?'light':'dark';$('#ph').dataset.t=S.theme;}render();go('me');return;}
  if(d.addgrp){if(d.addgrp=='shared'&&CLOUD&&ME){toast('Найдите человека и создайте группу в его профиле');go('search');return;}S[d.addgrp].push({id:uid(),name:'Новая группа',days:[]});render();go(d.addgrp);return;}
- if(d.addnote!==undefined){S.notes.unshift({title:'Название',text:''});render();go('notes');return;}
+ if(d.addnote!==undefined){S.notes.unshift({title:'Новая заметка',text:''});render();go('notes');openNote(0);return;}
  if(d.addday){pick={k:d.addday,v:null};sheet(`<h3>Добавить в группу</h3><div class="chips">${DAYS.map(x=>`<button class="chip" data-d="${x}">${x}</button>`).join('')}</div><button class="cta" data-confirmday>Добавить</button>`);return;}
  if(d.d){document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c==t));pick.v=d.d;return;}
  if(d.confirmday!==undefined){if(!pick.v)return toast('Выберите день');const[k,gi]=pick.k.split('.');S[k][gi].days.push({d:pick.v,a:[],p:k=='shared',by:ME});persist(k,gi);closeSheet();render();go(k);return;}
@@ -384,6 +434,8 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('input',e=>{const t=e.target;
  if(t.id=='q')res(t.value);
+ if(t.id=='nft'&&S.on!=null){S.notes[S.on].title=t.value;save();}
+ if(t.id=='nfx'&&S.on!=null){S.notes[S.on].text=t.value;save();}
  if(t.dataset.nt)S.notes[t.dataset.nt].text=t.value;
  if(t.dataset.ntt)S.notes[t.dataset.ntt].title=t.value;save();});
 document.addEventListener('focusout',e=>{const g=e.target.dataset&&e.target.dataset.gn;if(g){const[k,i]=g.split('.');S[k][i].name=e.target.textContent.trim()||'Группа';save();persist(k,i);sync();}});
@@ -392,7 +444,15 @@ try{render();}catch(e){$('#serr').style.color='#FE2C55';$('#serr').textContent='
 try{renderAuth();initCloud();}catch(e){}
 go('splash');
 let hid=false;
-document.addEventListener('visibilitychange',()=>{if(document.hidden)hid=true;else if(hid){hid=false;if(skip){skip=false;refreshPerm();return;}closeSheet();go('splash');}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){hid=true;save();}else if(hid){hid=false;if(skip){skip=false;refreshPerm();return;}closeSheet();go('splash');}});
+document.addEventListener('change',e=>{if(e.target.id!='avf')return;const f=e.target.files&&e.target.files[0];if(!f)return;
+ const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas'),n=256,m=Math.min(im.width,im.height);c.width=c.height=n;c.getContext('2d').drawImage(im,(im.width-m)/2,(im.height-m)/2,m,m,0,0,n,n);S.pf.ava=c.toDataURL('image/jpeg',0.85);save();render();toast('Аватарка обновлена');};im.onerror=()=>toast('Не удалось открыть фото');im.src=r.result;};r.readAsDataURL(f);e.target.value='';});
+try{history.pushState({b:1},'');}catch(e){}
+addEventListener('popstate',()=>{try{
+ if($('#scrim').classList.contains('on')){closeSheet();history.pushState({b:1},'');return;}
+ if($('#full').classList.contains('on')){closeNote();history.pushState({b:1},'');return;}
+ if(!['home','splash','auth'].includes(S.cur)){go('home');history.pushState({b:1},'');return;}
+ toast('Нажмите «назад» ещё раз, чтобы выйти');}catch(e){}});
 addEventListener('pageshow',e=>{if(e.persisted){closeSheet();go('splash');}});
 </script>
 </body></html>
