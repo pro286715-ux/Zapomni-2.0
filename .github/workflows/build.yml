@@ -81,6 +81,7 @@ jobs:
               r.put("dnd", nm.isNotificationPolicyAccessGranted());
               r.put("admin", dp.isAdminActive(new ComponentName(c, AdminReceiver.class)));
               r.put("overlay", Settings.canDrawOverlays(c));
+              r.put("battery", ((android.os.PowerManager) c.getSystemService(Context.POWER_SERVICE)).isIgnoringBatteryOptimizations(c.getPackageName()));
               r.put("alarm", Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms());
               call.resolve(r);
             }
@@ -123,6 +124,7 @@ jobs:
                 i.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, new ComponentName(c, AdminReceiver.class));
               }
               else if (k.equals("overlay")) i = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse(pkg));
+              else if (k.equals("battery")) i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse(pkg));
               else if (k.equals("alarm") && Build.VERSION.SDK_INT >= 31) i = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse(pkg));
               else i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse(pkg));
               i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -150,14 +152,35 @@ jobs:
           import android.net.Uri;
           import android.os.Build;
           import java.util.Calendar;
+          import java.util.HashMap;
           import org.json.JSONArray;
           import org.json.JSONObject;
 
           public class Scheduler extends BroadcastReceiver {
             static final String P = "zp";
+            static final long EVERY = 15 * 60 * 1000L;
 
             static void save(Context c, String items, boolean notify) {
-              c.getSharedPreferences(P, 0).edit().putString("items", items).putBoolean("notify", notify).apply();
+              SharedPreferences sp = c.getSharedPreferences(P, 0);
+              try {
+                JSONArray old = new JSONArray(sp.getString("items", "[]"));
+                JSONArray nu = new JSONArray(items);
+                HashMap<String, String> m = new HashMap<String, String>();
+                for (int i = 0; i < nu.length(); i++) m.put(nu.getJSONObject(i).getString("id"), nu.getJSONObject(i).toString());
+                for (int i = 0; i < old.length(); i++) {
+                  JSONObject o = old.getJSONObject(i);
+                  String id = o.getString("id");
+                  if (sp.getBoolean("a_" + id, false) && !o.toString().equals(m.get(id))) {
+                    try {
+                      run(c, sp, o, 1);
+                    } catch (Exception e) {
+                    }
+                    sp.edit().putBoolean("a_" + id, false).apply();
+                  }
+                }
+              } catch (Exception e) {
+              }
+              sp.edit().putString("items", items).putBoolean("notify", notify).apply();
             }
 
             static PendingIntent pi(Context c, int code, String id, int ph) {
@@ -167,6 +190,23 @@ jobs:
 
             static boolean has(JSONArray d, int v) throws Exception {
               for (int i = 0; i < d.length(); i++) if (d.getInt(i) == v) return true;
+              return false;
+            }
+
+            static int mins(String hm) {
+              String[] p = hm.split(":");
+              return Integer.parseInt(p[0]) * 60 + Integer.parseInt(p[1]);
+            }
+
+            static boolean inRange(JSONObject o) throws Exception {
+              Calendar now = Calendar.getInstance();
+              int n = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
+              int f = mins(o.getString("from")), t = mins(o.getString("to"));
+              JSONArray d = o.getJSONArray("days");
+              int dow = now.get(Calendar.DAY_OF_WEEK);
+              int prev = dow == 1 ? 7 : dow - 1;
+              if (f < t) return has(d, dow) && n >= f && n < t;
+              if (f > t) return (has(d, dow) && n >= f) || (has(d, prev) && n < t);
               return false;
             }
 
@@ -216,17 +256,48 @@ jobs:
               } catch (Exception e) {
               }
               sp.edit().putString("ids", ids.toString()).apply();
+              try {
+                am.setInexactRepeating(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + EVERY, EVERY, pi(c, 7771, "", 2));
+              } catch (Exception e) {
+              }
+              reconcile(c);
+              ZapomniWidget.updateAll(c);
+            }
+
+            static void reconcile(Context c) {
+              SharedPreferences sp = c.getSharedPreferences(P, 0);
+              try {
+                JSONArray a = new JSONArray(sp.getString("items", "[]"));
+                for (int n = 0; n < a.length(); n++) {
+                  JSONObject o = a.getJSONObject(n);
+                  String t = o.getString("type");
+                  if (!t.equals("dnd") && !t.equals("silent")) continue;
+                  boolean act = sp.getBoolean("a_" + o.getString("id"), false);
+                  boolean in = inRange(o);
+                  try {
+                    if (in && !act) run(c, sp, o, 0);
+                    else if (!in && act) run(c, sp, o, 1);
+                  } catch (Exception e) {
+                  }
+                }
+              } catch (Exception e) {
+              }
             }
 
             @Override
             public void onReceive(Context c, Intent in) {
-              if (Intent.ACTION_BOOT_COMPLETED.equals(in.getAction())) {
+              if (in.getAction() != null) {
                 scheduleAll(c);
+                return;
+              }
+              int ph = in.getIntExtra("ph", 0);
+              if (ph == 2) {
+                reconcile(c);
+                ZapomniWidget.updateAll(c);
                 return;
               }
               SharedPreferences sp = c.getSharedPreferences(P, 0);
               String id = in.getStringExtra("id");
-              int ph = in.getIntExtra("ph", 0);
               try {
                 JSONArray a = new JSONArray(sp.getString("items", "[]"));
                 for (int n = 0; n < a.length(); n++) {
@@ -236,6 +307,18 @@ jobs:
               } catch (Exception e) {
               }
               scheduleAll(c);
+            }
+
+            static boolean others(SharedPreferences sp, String id, String type) {
+              try {
+                JSONArray a = new JSONArray(sp.getString("items", "[]"));
+                for (int n = 0; n < a.length(); n++) {
+                  JSONObject o = a.getJSONObject(n);
+                  if (!o.getString("id").equals(id) && o.getString("type").equals(type) && sp.getBoolean("a_" + o.getString("id"), false)) return true;
+                }
+              } catch (Exception e) {
+              }
+              return false;
             }
 
             static void run(Context c, SharedPreferences sp, JSONObject o, int ph) throws Exception {
@@ -253,12 +336,13 @@ jobs:
                     ed.putBoolean("a_" + id, true);
                     if (nt) note(c, title, text, null);
                   } else if (!on && act) {
-                    nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL);
+                    if (!others(sp, id, t)) nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL);
                     ed.putBoolean("a_" + id, false);
                   }
                 } else if (t.equals("silent")) {
                   if (on) {
-                    ed.putInt("r_" + id, au.getRingerMode()).putBoolean("a_" + id, true).apply();
+                    if (!others(sp, id, t)) sp.edit().putInt("r0", au.getRingerMode()).apply();
+                    ed.putBoolean("a_" + id, true);
                     try {
                       au.setRingerMode(AudioManager.RINGER_MODE_SILENT);
                     } catch (Exception e) {
@@ -266,9 +350,11 @@ jobs:
                     }
                     if (nt) note(c, title, text, null);
                   } else if (act) {
-                    try {
-                      au.setRingerMode(sp.getInt("r_" + id, AudioManager.RINGER_MODE_NORMAL));
-                    } catch (Exception e) {
+                    if (!others(sp, id, t)) {
+                      try {
+                        au.setRingerMode(sp.getInt("r0", AudioManager.RINGER_MODE_NORMAL));
+                      } catch (Exception e) {
+                      }
                     }
                     ed.putBoolean("a_" + id, false);
                   }
@@ -475,9 +561,9 @@ jobs:
           import re
           p='android/app/src/main/AndroidManifest.xml'
           s=open(p,encoding='utf-8').read()
-          perms=''.join('<uses-permission android:name="android.permission.%s"/>'%x for x in ['POST_NOTIFICATIONS','SCHEDULE_EXACT_ALARM','RECEIVE_BOOT_COMPLETED','ACCESS_NOTIFICATION_POLICY','SYSTEM_ALERT_WINDOW'])
+          perms=''.join('<uses-permission android:name="android.permission.%s"/>'%x for x in ['POST_NOTIFICATIONS','SCHEDULE_EXACT_ALARM','RECEIVE_BOOT_COMPLETED','ACCESS_NOTIFICATION_POLICY','SYSTEM_ALERT_WINDOW','REQUEST_IGNORE_BATTERY_OPTIMIZATIONS'])
           q='<queries><intent><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent></queries>'
-          rec='<receiver android:name=".Scheduler" android:exported="false"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED"/></intent-filter></receiver><receiver android:name=".AdminReceiver" android:permission="android.permission.BIND_DEVICE_ADMIN" android:exported="true"><meta-data android:name="android.app.device_admin" android:resource="@xml/device_admin"/><intent-filter><action android:name="android.app.action.DEVICE_ADMIN_ENABLED"/></intent-filter></receiver><receiver android:name=".ZapomniWidget" android:exported="true"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE"/></intent-filter><meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info"/></receiver><activity android:name=".WidgetConfig" android:exported="true" android:theme="@android:style/Theme.Translucent.NoTitleBar"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_CONFIGURE"/></intent-filter></activity>'
+          rec='<receiver android:name=".Scheduler" android:exported="false"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED"/><action android:name="android.intent.action.MY_PACKAGE_REPLACED"/><action android:name="android.intent.action.TIME_SET"/><action android:name="android.intent.action.TIMEZONE_CHANGED"/></intent-filter></receiver><receiver android:name=".AdminReceiver" android:permission="android.permission.BIND_DEVICE_ADMIN" android:exported="true"><meta-data android:name="android.app.device_admin" android:resource="@xml/device_admin"/><intent-filter><action android:name="android.app.action.DEVICE_ADMIN_ENABLED"/></intent-filter></receiver><receiver android:name=".ZapomniWidget" android:exported="true"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE"/></intent-filter><meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info"/></receiver><activity android:name=".WidgetConfig" android:exported="true" android:theme="@android:style/Theme.Translucent.NoTitleBar"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_CONFIGURE"/></intent-filter></activity>'
           s=s.replace('<activity','<activity android:screenOrientation="fullUser"',1) if 'screenOrientation' not in s else s
           s=s.replace('<application',perms+q+'<application',1).replace('</application>',rec+'</application>',1)
           open(p,'w',encoding='utf-8').write(s)
